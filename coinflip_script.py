@@ -1,4 +1,3 @@
-import outcome
 import pyautogui
 import cv2
 import pytesseract
@@ -135,7 +134,7 @@ def main():
         elif outcome == 'lose':
             consecutive_losses += 1
             print(f"You lost. Consecutive losses: {consecutive_losses}")
-t
+
         save_to_database(outcome, 10000, consecutive_losses)
         if consecutive_losses >= 4:
             play_notification_sound()
@@ -143,5 +142,5 @@ t
             break
         time.sleep(5)
 
-# if __name__ == '__main__':
-    main()cf 10
+if __name__ == '__main__':
+    main()
