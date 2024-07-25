@@ -13,7 +13,6 @@ def create_database():
     try:
         conn = sqlite3.connect('coinflips.db')
         cursor = conn.cursor()
-
         # Create the Coinflips table if it doesn't exist
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS Coinflips (
@@ -38,7 +37,7 @@ def fetch_recent_results():
         cursor = conn.cursor()
         cursor.execute('''
             SELECT result, amount, consecutive_losses_or_wins FROM Coinflips
-            ORDER BY id DESC LIMIT 20
+            ORDER BY id DESC LIMIT 100
         ''')
         results = cursor.fetchall()
         return results
@@ -56,14 +55,12 @@ def capture_screen(region=None):
     screenshot = cv2.cvtColor(np.array(screenshot), cv2.COLOR_RGB2BGR)
     enhanced_image = cv2.cvtColor(screenshot, cv2.COLOR_BGR2GRAY)
     enhanced_image = cv2.medianBlur(enhanced_image, 3)
-    cv2.imwrite('debug_screenshot.png', enhanced_image)
     return enhanced_image
 
 def detect_outcome(screenshot):
     try:
         _, thresh = cv2.threshold(screenshot, 128, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
         text = pytesseract.image_to_string(thresh, config='--psm 6')
-        print(f"OCR Text: {text}")  # Print the recognized text for debugging
     except Exception as e:
         print(f"Error during OCR: {e}")
         return None
@@ -89,7 +86,6 @@ def send_command(command, delay=0.1, click_coords=None):
                 time.sleep(0.5)
 
 def play_notification_sound():
-    print("Playing notification sound...")  # Debug print
     if platform.system() == "Windows":
         import winsound
         winsound.Beep(1000, 500)
@@ -102,18 +98,12 @@ def save_to_database(result, amount, consecutive_losses):
         cursor = conn.cursor()
         now = datetime.now()
         datetime_str = now.strftime("%Y-%m-%d %H:%M:%S")
-
-        # Ensure result is a boolean value (1 for win, 0 for lose)
         result_boolean = 1 if result == 'win' else 0
-
-        print(f"Saving to database: result={result_boolean}, amount={amount}, datetime={datetime_str}, consecutive_losses_or_wins={consecutive_losses}")
-
         cursor.execute('''
             INSERT INTO Coinflips (result, amount, datetime, consecutive_losses_or_wins)
             VALUES (?, ?, ?, ?)
         ''', (result_boolean, amount, datetime_str, consecutive_losses))
         conn.commit()
-        print("Result saved to database.")
     except Exception as e:
         print(f"Error saving to database: {e}")
     finally:
@@ -123,6 +113,38 @@ def save_to_database(result, amount, consecutive_losses):
 def calculate_next_bet(consecutive_losses):
     base_bet = 10000  # Starting bet amount
     return base_bet * (2 ** consecutive_losses)
+
+# Calculate statistics
+def calculate_statistics(coinflips):
+    wins = sum(1 for cf in coinflips if cf[0] == 1)
+    losses = sum(1 for cf in coinflips if cf[0] == 0)
+    consecutive_wins = 0
+    consecutive_losses = 0
+
+    if coinflips:
+        last_result = coinflips[0][0]
+        for cf in coinflips:
+            if cf[0] == last_result:
+                if last_result == 1:
+                    consecutive_wins += 1
+                else:
+                    consecutive_losses += 1
+            else:
+                break
+
+    return wins, losses, consecutive_wins, consecutive_losses
+
+# Ensure profit
+def ensure_profit(coinflips, next_bet, consecutive_losses, base_bet=10000):
+    total_winnings = sum([cf[1] for cf in coinflips if cf[0] == 1])
+    total_losses = sum([cf[1] for cf in coinflips if cf[0] == 0])
+    potential_loss = next_bet * (consecutive_losses + 1)
+    potential_win = next_bet * 2
+    if total_winnings - total_losses + potential_win - potential_loss > 0:
+        return True, next_bet
+    else:
+        adjusted_bet = (total_losses - total_winnings + base_bet) / (2 ** (consecutive_losses + 1))
+        return False, adjusted_bet
 
 def main():
     create_database()  # Ensure the database is created
@@ -136,8 +158,19 @@ def main():
     region = (region_left, region_top, region_width, region_height)
 
     while True:
+        # Fetch recent results to calculate consecutive losses
+        coinflips = fetch_recent_results()
+        if coinflips:
+            wins, losses, consecutive_wins, consecutive_losses = calculate_statistics(coinflips)
+
         # Calculate the next bet amount based on consecutive losses
         bet_amount = calculate_next_bet(consecutive_losses)
+
+        # Ensure the betting strategy will be profitable
+        profitable, adjusted_bet = ensure_profit(coinflips, bet_amount, consecutive_losses)
+        if not profitable:
+            bet_amount = adjusted_bet
+
         send_command(f'/cf {bet_amount}', click_coords=click_coords)
 
         outcome = None
@@ -147,7 +180,6 @@ def main():
             screenshot = capture_screen(region=region)
             outcome = detect_outcome(screenshot)
             if outcome is None:
-                print("Waiting for result...")
                 time.sleep(1)
         if outcome is None:
             print("Timed out waiting for result.")
