@@ -7,6 +7,9 @@ from model import load_model, predict_next_bet, train_model, calculate_bet_amoun
 def main():
     create_database()  # Ensure the database is created
     model, scaler = load_model()  # Load the trained model and scaler
+    if model is None or scaler is None:
+        print("Unable to load or train model. Starting with default strategy.")
+        model, scaler = None, None
     click_coords = (820, 410)
     screen_width, screen_height = pyautogui.size()
     region_width = 1100
@@ -18,12 +21,17 @@ def main():
     balance = 50_000_000  # Starting balance
     min_bet = 10000
     flips_since_last_train = 0
-    retrain_interval = 100  # Retrain every 100 flips
+    retrain_interval = 50  # Retrain every 100 flips
 
     while True:
-        prediction = predict_next_bet(model, scaler)
-        bet_amount = calculate_bet_amount(prediction, balance, min_bet)
-        print(f"Model prediction: {prediction:.2f}")
+        if model is not None and scaler is not None:
+            prediction = predict_next_bet(model, scaler)
+            bet_amount = calculate_bet_amount(prediction, balance, min_bet)
+            print(f"Model prediction: {prediction:.2f}")
+        else:
+            prediction = 0.5  # Default to 50% win probability
+            bet_amount = min_bet
+            print("Using default strategy (no model available)")
         print(f"Bet amount: {bet_amount:.0f}")
 
         send_command(f'/cf {int(bet_amount)}', click_coords=click_coords)
@@ -43,6 +51,7 @@ def main():
 
         if outcome == 'win':
             balance += bet_amount
+
             print(f"You won! New balance: {balance}")
         elif outcome == 'lose':
             balance -= bet_amount
@@ -55,6 +64,8 @@ def main():
             print("Retraining model...")
             model, scaler = train_model()
             flips_since_last_train = 0
+            if model is None or scaler is None:
+                print("Still not enough data to train model. Continuing with default strategy.")
 
         time.sleep(5)
 

@@ -4,7 +4,7 @@ from datetime import datetime
 
 def create_database():
     try:
-        conn = sqlite3.connect('coinflipsv2.db')
+        conn = sqlite3.connect('coinflips.db')
         cursor = conn.cursor()
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS Coinflips (
@@ -24,7 +24,7 @@ def create_database():
 
 def fetch_recent_results():
     try:
-        conn = sqlite3.connect('coinflipsv2.db')
+        conn = sqlite3.connect('coinflips.db')
         cursor = conn.cursor()
         cursor.execute('''
             SELECT result, amount, consecutive_losses_or_wins FROM Coinflips
@@ -40,7 +40,7 @@ def fetch_recent_results():
 
 def save_to_database(result, amount, consecutive_losses):
     try:
-        conn = sqlite3.connect('coinflipsv2.db')
+        conn = sqlite3.connect('coinflips.db')
         cursor = conn.cursor()
         now = datetime.now()
         datetime_str = now.strftime("%Y-%m-%d %H:%M:%S")
@@ -57,7 +57,7 @@ def save_to_database(result, amount, consecutive_losses):
         conn.close()
 
 def fetch_all_results():
-    conn = sqlite3.connect('coinflipsv2.db')
+    conn = sqlite3.connect('coinflips.db')
     df = pd.read_sql_query("SELECT * FROM Coinflips", conn)
     conn.close()
     return df

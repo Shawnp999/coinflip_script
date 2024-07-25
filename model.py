@@ -12,10 +12,24 @@ SCALER_PATH = 'scaler.pkl'
 
 def prepare_data(sequence_length=100):
     data = fetch_all_results()
+    if len(data) == 0:
+        print("No data available. Unable to prepare data for the model.")
+        return None, None, None
+
     data = data.sort_values('datetime', ascending=False).reset_index(drop=True)
 
     # Use only the most recent 'sequence_length' entries
     data = data.head(sequence_length)
+
+    # If we have less than sequence_length entries, pad with default values
+    if len(data) < sequence_length:
+        pad_length = sequence_length - len(data)
+        pad_data = pd.DataFrame({
+            'result': [0.5] * pad_length,
+            'amount': [10000] * pad_length,
+            'datetime': [data['datetime'].min()] * pad_length
+        })
+        data = pd.concat([pad_data, data]).reset_index(drop=True)
 
     # Reverse the order so that the most recent is last
     data = data.iloc[::-1].reset_index(drop=True)
@@ -47,6 +61,9 @@ def create_model(input_shape):
 
 def train_model():
     X, y, scaler = prepare_data()
+    if X is None or y is None:
+        print("Not enough data to train the model. Please play more games.")
+        return None, None
     model = create_model((X.shape[1], X.shape[2]))
     model.fit(X, y, epochs=100, batch_size=1, verbose=1)
     model.save(MODEL_PATH)
@@ -54,13 +71,25 @@ def train_model():
     joblib.dump(scaler, SCALER_PATH)
     return model, scaler
 
+def predict_next_bet(model, scaler):
+    X, _, _ = prepare_data()
+    if X is None:
+        print("Not enough data to make a prediction. Using default 50% win probability.")
+        return 0.5
+    prediction = model.predict(X)
+    return prediction[0][-1][0]
+
 def load_model():
     if not os.path.exists(MODEL_PATH) or not os.path.exists(SCALER_PATH):
         print("Training the model...")
-        return train_model()
-    model = tf.keras.models.load_model(MODEL_PATH)
-    import joblib
-    scaler = joblib.load(SCALER_PATH)
+        model, scaler = train_model()
+        if model is None or scaler is None:
+            print("Failed to train the model. Using default prediction.")
+            return None, None
+    else:
+        model = tf.keras.models.load_model(MODEL_PATH)
+        import joblib
+        scaler = joblib.load(SCALER_PATH)
     return model, scaler
 
 def predict_next_bet(model, scaler):
@@ -79,18 +108,22 @@ def calculate_bet_amount(prediction, balance, min_bet=10000):
 
 def main():
     model, scaler = load_model()
+    if model is None or scaler is None:
+        print("Unable to load or train model. Using default 50% win probability.")
+        prediction = 0.5
+    else:
+        prediction = predict_next_bet(model, scaler)
+
     balance = 50_000_000  # Starting balance
     min_bet = 10000
-
-    prediction = predict_next_bet(model, scaler)
     bet_amount = calculate_bet_amount(prediction, balance, min_bet)
 
     print(f"Prediction (win probability): {prediction:.2f}")
     print(f"Recommended bet amount: {bet_amount:.0f}")
 
-    # Print model summary
-    print("\nModel Summary:")
-    model.summary()
+    if model is not None:
+        print("\nModel Summary:")
+        model.summary()
 
 if __name__ == "__main__":
     main()
