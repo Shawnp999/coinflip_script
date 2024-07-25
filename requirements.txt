@@ -1,0 +1,9 @@
+pyautogui~=0.9.54
+opencv-python-headless
+pytesseract~=0.3.10
+numpy~=1.26.4
+tensorflow~=2.17.0
+pandas~=2.2.2
+
+scikit-learn~=1.5.1
+opencv-python~=4.10.0.84
