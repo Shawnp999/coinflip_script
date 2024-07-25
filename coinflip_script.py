@@ -31,6 +31,23 @@ def create_database():
     finally:
         conn.close()
 
+# Fetch recent results from the database
+def fetch_recent_results():
+    try:
+        conn = sqlite3.connect('coinflips.db')
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT result, amount, consecutive_losses_or_wins FROM Coinflips
+            ORDER BY id DESC LIMIT 20
+        ''')
+        results = cursor.fetchall()
+        return results
+    except Exception as e:
+        print(f"Error fetching recent results: {e}")
+        return []
+    finally:
+        conn.close()
+
 # Configure Tesseract executable path
 pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
 
@@ -102,6 +119,11 @@ def save_to_database(result, amount, consecutive_losses):
     finally:
         conn.close()
 
+# Calculate the next bet amount
+def calculate_next_bet(consecutive_losses):
+    base_bet = 10000  # Starting bet amount
+    return base_bet * (2 ** consecutive_losses)
+
 def main():
     create_database()  # Ensure the database is created
     consecutive_losses = 0
@@ -114,7 +136,10 @@ def main():
     region = (region_left, region_top, region_width, region_height)
 
     while True:
-        send_command('/cf 10k', click_coords=click_coords)
+        # Calculate the next bet amount based on consecutive losses
+        bet_amount = calculate_next_bet(consecutive_losses)
+        send_command(f'/cf {bet_amount}', click_coords=click_coords)
+
         outcome = None
         timeout = 30
         start_time = time.time()
@@ -123,7 +148,7 @@ def main():
             outcome = detect_outcome(screenshot)
             if outcome is None:
                 print("Waiting for result...")
-                time.sleep(2)
+                time.sleep(1)
         if outcome is None:
             print("Timed out waiting for result.")
             continue
@@ -135,7 +160,7 @@ def main():
             consecutive_losses += 1
             print(f"You lost. Consecutive losses: {consecutive_losses}")
 
-        save_to_database(outcome, 10000, consecutive_losses)
+        save_to_database(outcome, bet_amount, consecutive_losses)
         if consecutive_losses >= 4:
             play_notification_sound()
             print("Four consecutive losses. Playing sound and exiting.")
