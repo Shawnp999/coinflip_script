@@ -42,13 +42,3 @@ def send_command(command, delay=0.1, click_coords=None):
                 pyautogui.click(click_coords[0] + dx, click_coords[1] + dy)
                 time.sleep(0.5)
 
-def play_notification_sound():
-    if platform.system() == "Windows":
-        import winsound
-        winsound.Beep(1000, 500)
-    else:
-        os.system('play -nq -t alsa synth 0.5 sine 440')
-
-def calculate_next_bet(consecutive_losses):
-    base_bet = 10000  # Starting bet amount
-    return base_bet * (2 ** consecutive_losses)

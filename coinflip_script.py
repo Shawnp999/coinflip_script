@@ -1,7 +1,7 @@
 import time
 import pyautogui
 from database import create_database, fetch_recent_results, save_to_database
-from utils import capture_screen, detect_outcome, send_command, play_notification_sound
+from utils import capture_screen, detect_outcome, send_command
 from model import load_model, predict_next_bet, train_model, calculate_bet_amount
 
 def main():
@@ -19,7 +19,17 @@ def main():
     region_top = screen_height - region_height
     region = (region_left, region_top, region_width, region_height)
 
-    balance = 50_000_000  # Starting balance
+    # Get the balance from user input
+    while True:
+        try:
+            balance = int(input("Enter the starting balance (up to 100,000,000): "))
+            if 0 < balance <= 100_000_000:
+                break
+            else:
+                print("Balance must be a positive integer not exceeding 100,000,000.")
+        except ValueError:
+            print("Invalid input. Please enter a valid integer.")
+
     min_bet = 10000
     flips_since_last_train = 0
     retrain_interval = 50  # Retrain every 50 flips
@@ -68,3 +78,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+
