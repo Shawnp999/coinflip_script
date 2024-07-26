@@ -10,11 +10,15 @@ from database import fetch_all_results
 MODEL_PATH = 'coinflip_model.h5'
 SCALER_PATH = 'scaler.pkl'
 
-def prepare_data(sequence_length=100):
+def prepare_data(sequence_length=15):
     data = fetch_all_results()
     if len(data) == 0:
         print("No data available. Unable to prepare data for the model.")
         return None, None, None
+
+    # Ensure 'datetime' column is in datetime format
+    data['datetime'] = pd.to_datetime(data['datetime'], errors='coerce')
+    data = data.dropna(subset=['datetime'])  # Remove rows where 'datetime' could not be parsed
 
     data = data.sort_values('datetime', ascending=False).reset_index(drop=True)
 
@@ -50,6 +54,7 @@ def prepare_data(sequence_length=100):
     y = y.reshape((1, y.shape[0], 1))
 
     return X, y, scaler
+
 
 def create_model(input_shape):
     model = Sequential([

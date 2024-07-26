@@ -8,11 +8,11 @@
       <jdbc-url>jdbc:sqlite:C:\Users\2001s\PycharmProjects\CoinFlipScriptV1\coinflips.db</jdbc-url>
       <working-dir>$ProjectFileDir$</working-dir>
     </data-source>
-    <data-source source="LOCAL" name="coinflipsv2.db" uuid="b9db424d-78e5-42d8-b8a1-d3a7f6cb588a">
+    <data-source source="LOCAL" name="coinflipssecond.db" uuid="5dbcad7e-0a21-4585-b178-4970c44b60e0">
       <driver-ref>sqlite.xerial</driver-ref>
       <synchronize>true</synchronize>
       <jdbc-driver>org.sqlite.JDBC</jdbc-driver>
-      <jdbc-url>jdbc:sqlite:$PROJECT_DIR$/coinflipsv2.db</jdbc-url>
+      <jdbc-url>jdbc:sqlite:$PROJECT_DIR$/ coinflipssecond.db</jdbc-url>
       <working-dir>$ProjectFileDir$</working-dir>
     </data-source>
   </component>
