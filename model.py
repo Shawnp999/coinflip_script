@@ -1,11 +1,13 @@
 import os
+from datetime import time
+
 import numpy as np
 import pandas as pd
 import tensorflow as tf
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Dense, LSTM
 from sklearn.preprocessing import MinMaxScaler
-from database import fetch_all_results
+from database import fetch_all_results, get_result_count
 
 MODEL_PATH = 'coinflip_model.h5'
 SCALER_PATH = 'scaler.pkl'
@@ -112,23 +114,54 @@ def calculate_bet_amount(prediction, balance, min_bet=10000):
         return min_bet
 
 def main():
-    model, scaler = load_model()
-    if model is None or scaler is None:
-        print("Unable to load or train model. Using default 50% win probability.")
-        prediction = 0.5
-    else:
-        prediction = predict_next_bet(model, scaler)
+    last_processed_count = 0
 
-    balance = 50_000_000  # Starting balance
-    min_bet = 10000
-    bet_amount = calculate_bet_amount(prediction, balance, min_bet)
+    while True:
+        current_count = get_result_count()
 
-    print(f"Prediction (win probability): {prediction:.2f}")
-    print(f"Recommended bet amount: {bet_amount:.0f}")
+        if current_count > last_processed_count:
+            model, scaler = load_model()
+            if model is None or scaler is None:
+                print("Not enough data to train the model. Waiting for more results...")
+                time.sleep(5)  # Wait for 5 seconds before checking again
+                continue
 
-    if model is not None:
-        print("\nModel Summary:")
-        model.summary()
+            prediction = predict_next_bet(model, scaler)
+
+            if prediction == 0.5:
+                print("Not enough data for prediction. Waiting for more results...")
+                time.sleep(5)  # Wait for 5 seconds before checking again
+                continue
+
+            balance = 50_000_000  # This should be replaced with the actual current balance
+            min_bet = 10000
+            bet_amount = calculate_bet_amount(prediction, balance, min_bet)
+
+            print(f"New result received. Total results: {current_count}")
+            print(f"Prediction (win probability): {prediction:.2f}")
+            print(f"Recommended bet amount: {bet_amount:.0f}")
+
+            # Here you would typically place the bet using the calculated bet_amount
+            # For demonstration, we'll just print it
+            print(f"Placing bet of {bet_amount:.0f}")
+
+            # Wait for the result of this bet
+            # This part should be replaced with actual result detection logic
+            time.sleep(10)  # Simulating waiting for result
+
+            # After getting the result, retrain the model
+            print("Updating the model...")
+            model, scaler = train_model()
+            if model is None or scaler is None:
+                print("Failed to update the model. Using previous model or default strategy.")
+
+            last_processed_count = current_count
+        else:
+            print("Waiting for new result...")
+            time.sleep(5)  # Check for new results every 5 seconds
+
+if __name__ == "__main__":
+    main()
 
 if __name__ == "__main__":
     main()

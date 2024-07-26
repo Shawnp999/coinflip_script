@@ -2,9 +2,7 @@ import pyautogui
 import cv2
 import pytesseract
 import numpy as np
-import time
-import platform
-import os
+
 
 def capture_screen(region=None):
     screenshot = pyautogui.screenshot(region=region)
@@ -27,18 +25,4 @@ def detect_outcome(screenshot):
     elif 'You have lost the coinflip' in text:
         return 'lose'
     return None
-
-def send_command(command, delay=0.1, click_coords=None):
-    time.sleep(3)
-    pyautogui.typewrite('t')
-    time.sleep(2)
-    for char in command:
-        pyautogui.typewrite(char, interval=delay)
-    pyautogui.press('enter')
-    time.sleep(2)
-    if click_coords:
-        for dx in [-1, 1]:
-            for dy in [-1, 1]:
-                pyautogui.click(click_coords[0] + dx, click_coords[1] + dy)
-                time.sleep(0.5)
 

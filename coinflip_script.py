@@ -1,12 +1,12 @@
 import time
 import pyautogui
-from database import create_database, fetch_recent_results, save_to_database
-from utils import capture_screen, detect_outcome, send_command
+from database import create_database, save_to_database, get_result_count
+from utils import capture_screen, detect_outcome
 from model import load_model, predict_next_bet, train_model, calculate_bet_amount
 
 def main():
-    create_database()  # Ensure the database is created
-    model, scaler = load_model()  # Load the trained model and scaler
+    create_database()
+    model, scaler = load_model()
     if model is None or scaler is None:
         print("Unable to load or train model. Starting with default strategy.")
         model, scaler = None, None
@@ -18,6 +18,9 @@ def main():
     region_left = 0
     region_top = screen_height - region_height
     region = (region_left, region_top, region_width, region_height)
+
+    print(f"Screen size: {screen_width}x{screen_height}")
+    print(f"Capture region: {region}")
 
     # Get the balance from user input
     while True:
@@ -32,9 +35,22 @@ def main():
 
     min_bet = 10000
     flips_since_last_train = 0
-    retrain_interval = 50  # Retrain every 50 flips
+    retrain_interval = 50
+    last_processed_count = get_result_count()
 
     while True:
+        # Wait for 5 seconds
+        print("Waiting for 5 seconds...")
+        time.sleep(5)
+
+        # Type 't' command
+        print("Typing 't' command...")
+        pyautogui.typewrite('t')
+
+        # Wait for 1 second
+        time.sleep(1)
+
+        # Calculate bet amount
         if model is not None and scaler is not None:
             prediction = predict_next_bet(model, scaler)
             bet_amount = calculate_bet_amount(prediction, balance, min_bet)
@@ -42,21 +58,39 @@ def main():
             prediction = 0.5  # Default to 50% win probability
             bet_amount = min_bet
 
-        send_command(f'/cf {int(bet_amount)}', click_coords=click_coords)
+        # Type '/cf bet_amount' command
+        command = f'/cf {int(bet_amount)}'
+        print(f"Typing command: {command}")
+        pyautogui.typewrite(command)
+        pyautogui.press('enter')
 
+        # Click as specified
+        print("Clicking...")
+        for dx in [-1, 1]:
+            for dy in [-1, 1]:
+                pyautogui.click(click_coords[0] + dx, click_coords[1] + dy)
+                time.sleep(0.5)
+
+        # Check for outcome
         outcome = None
         timeout = 30
         start_time = time.time()
         while outcome is None and (time.time() - start_time) < timeout:
+            print("Capturing screen...")
             screenshot = capture_screen(region=region)
+            print("Screen captured. Detecting outcome...")
             outcome = detect_outcome(screenshot)
             if outcome is None:
                 print("Waiting for result...")
-                time.sleep(1)
+                time.sleep(2)
+
         if outcome is None:
             print("Timed out waiting for result.")
             continue
 
+        print(f"Outcome detected: {outcome}")
+
+        # Update balance and save result
         if outcome == 'win':
             balance += bet_amount
             print(f"You won! New balance: {balance}")
@@ -64,8 +98,11 @@ def main():
             balance -= bet_amount
             print(f"You lost. New balance: {balance}")
 
-        save_to_database(outcome, bet_amount, 0)  # Save the result to the database
+        print("Saving to database...")
+        save_to_database(outcome, bet_amount, 0)
+        print("Saved to database.")
 
+        # Retrain model if necessary
         flips_since_last_train += 1
         if flips_since_last_train >= retrain_interval:
             print("Retraining model...")
@@ -74,8 +111,10 @@ def main():
             if model is None or scaler is None:
                 print("Still not enough data to train model. Continuing with default strategy.")
 
-        time.sleep(5)
+        last_processed_count = get_result_count()
 
 if __name__ == '__main__':
     main()
 
+if __name__ == '__main__':
+    main()
