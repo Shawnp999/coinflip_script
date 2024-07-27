@@ -37,6 +37,7 @@ def main():
     flips_since_last_train = 0
     retrain_interval = 50
     last_processed_count = get_result_count()
+    consecutive_losses = 0
 
     while True:
         # Wait for 5 seconds
@@ -53,7 +54,7 @@ def main():
         # Calculate bet amount
         if model is not None and scaler is not None:
             prediction = predict_next_bet(model, scaler)
-            bet_amount = calculate_bet_amount(prediction, balance, min_bet)
+            bet_amount = calculate_bet_amount(prediction, balance, consecutive_losses, min_bet)
         else:
             prediction = 0.5  # Default to 50% win probability
             bet_amount = min_bet
@@ -93,28 +94,27 @@ def main():
         # Update balance and save result
         if outcome == 'win':
             balance += bet_amount
+            consecutive_losses = 0
             print(f"You won! New balance: {balance}")
         elif outcome == 'lose':
             balance -= bet_amount
+            consecutive_losses += 1
             print(f"You lost. New balance: {balance}")
 
         print("Saving to database...")
-        save_to_database(outcome, bet_amount, 0)
+        save_to_database(outcome, bet_amount, balance)
         print("Saved to database.")
 
-        # Retrain model if necessary
+        # Retrain model if necessarytt
         flips_since_last_train += 1
-        if flips_since_last_train >= retrain_interval:
-            print("Retraining model...")
-            model, scaler = train_model()
-            flips_since_last_train = 0
-            if model is None or scaler is None:
-                print("Still not enough data to train model. Continuing with default strategy.")
+        if flips_since_last_train >= retrain_interval:200
+        print("Retraining model...")
+        model, scaler = train_model()
+        flips_since_last_train = 0
+        if model is None or scaler is None:
+            print("Still not enough data to train model. Continuing with default strategy.")
 
         last_processed_count = get_result_count()
-
-if __name__ == '__main__':
-    main()
 
 if __name__ == '__main__':
     main()
