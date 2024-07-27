@@ -35,7 +35,7 @@ def main():
 
     min_bet = 10000
     flips_since_last_train = 0
-    retrain_interval = 50
+    retrain_interval = 10
     last_processed_count = get_result_count()
     consecutive_losses = 0
 
