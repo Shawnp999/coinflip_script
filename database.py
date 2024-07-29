@@ -1,3 +1,5 @@
+# database.py
+
 import sqlite3
 import pandas as pd
 from datetime import datetime
@@ -22,7 +24,6 @@ def create_database():
     finally:
         conn.close()
 
-
 def save_to_database(result, amount, consecutive_losses):
     try:
         conn = sqlite3.connect('coinflips.db')
@@ -46,8 +47,6 @@ def fetch_all_results():
     df = pd.read_sql_query("SELECT * FROM Coinflips", conn)
     conn.close()
     return df
-
-# New functions
 
 def get_result_count():
     try:

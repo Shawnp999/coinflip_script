@@ -1,8 +1,9 @@
+# utils.py
+
 import pyautogui
 import cv2
 import pytesseract
 import numpy as np
-
 
 def capture_screen(region=None):
     screenshot = pyautogui.screenshot(region=region)
@@ -25,4 +26,3 @@ def detect_outcome(screenshot):
     elif 'You have lost the coinflip' in text:
         return 'lose'
     return None
-

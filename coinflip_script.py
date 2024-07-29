@@ -1,6 +1,8 @@
+# main.py
+
 import time
 import pyautogui
-from database import create_database, save_to_database, get_result_count
+from database import create_database, save_to_database, get_result_count, fetch_latest_result
 from utils import capture_screen, detect_outcome
 from model import load_model, predict_next_bet, train_model, calculate_bet_amount
 
@@ -22,7 +24,6 @@ def main():
     print(f"Screen size: {screen_width}x{screen_height}")
     print(f"Capture region: {region}")
 
-    # Get the balance from user input
     while True:
         try:
             balance = int(input("Enter the starting balance (up to 100,000,000): "))
@@ -40,39 +41,31 @@ def main():
     consecutive_losses = 0
 
     while True:
-        # Wait for 5 seconds
         print("Waiting for 5 seconds...")
         time.sleep(5)
 
-        # Type 't' command
         print("Typing 't' command...")
         pyautogui.typewrite('t')
-
-        # Wait for 1 second
         time.sleep(1)
 
-        # Calculate bet amount
         if model is not None and scaler is not None:
             prediction = predict_next_bet(model, scaler)
             bet_amount = calculate_bet_amount(prediction, balance, consecutive_losses, min_bet)
         else:
-            prediction = 0.5  # Default to 50% win probability
+            prediction = 0.5
             bet_amount = min_bet
 
-        # Type '/cf bet_amount' command
         command = f'/cf {int(bet_amount)}'
         print(f"Typing command: {command}")
         pyautogui.typewrite(command)
         pyautogui.press('enter')
 
-        # Click as specified
         print("Clicking...")
         for dx in [-1, 1]:
             for dy in [-1, 1]:
                 pyautogui.click(click_coords[0] + dx, click_coords[1] + dy)
                 time.sleep(0.5)
 
-        # Check for outcome
         outcome = None
         timeout = 30
         start_time = time.time()
@@ -91,7 +84,6 @@ def main():
 
         print(f"Outcome detected: {outcome}")
 
-        # Update balance and save result
         if outcome == 'win':
             balance += bet_amount
             consecutive_losses = 0
@@ -105,12 +97,11 @@ def main():
         save_to_database(outcome, bet_amount, balance)
         print("Saved to database.")
 
-        # Retrain model if necessarytt
         flips_since_last_train += 1
-        if flips_since_last_train >= retrain_interval:200
-        print("Retraining model...")
-        model, scaler = train_model()
-        flips_since_last_train = 0
+        if flips_since_last_train >= retrain_interval:
+            print("Retraining model...")
+            model, scaler = train_model()
+            flips_since_last_train = 0
         if model is None or scaler is None:
             print("Still not enough data to train model. Continuing with default strategy.")
 
