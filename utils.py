@@ -2,7 +2,6 @@ import pyautogui
 import cv2
 import pytesseract
 import numpy as np
-import time
 import platform
 import os
 import logging

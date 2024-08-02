@@ -6,22 +6,7 @@ from database import create_database, fetch_recent_results, save_to_database
 from utils import capture_screen, detect_outcome, send_command, play_notification_sound
 from model import load_model_and_scaler, predict_next_bet, train_model, calculate_bet_amount, backup_database
 
-# TensorFlow diagnostic check
-try:
-    import tensorflow as tf
-
-    print("TensorFlow version:", tf.__version__)
-    print("TensorFlow is built with CUDA:", tf.test.is_built_with_cuda())
-    print("GPU device available:", tf.config.list_physical_devices('GPU'))
-except ImportError as e:
-    print("Error importing TensorFlow:", e)
-except Exception as e:
-    print("An unexpected error occurred:", e)
-    raise
-
-# Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-
 
 class CoinFlipBetting:
     def __init__(self):
@@ -30,7 +15,7 @@ class CoinFlipBetting:
         self.current_bet = self.min_bet
         self.consecutive_losses = 0
         self.flips_since_last_train = 0
-        self.retrain_interval = 50  # Retrain every 50 flips
+        self.retrain_interval = 50
         self.total_bets = 0
         self.total_wins = 0
         self.total_losses = 0
@@ -51,9 +36,7 @@ class CoinFlipBetting:
             logging.error("Invalid input for balance. Please enter an integer value.")
             return
 
-        self.place_bet()  # Start the betting process
-
-        # Schedule non-betting related tasks
+        self.place_bet()
         schedule.every().hour.do(self.retrain_model)
         schedule.every().day.at("00:00").do(self.backup_database)
 
@@ -65,10 +48,9 @@ class CoinFlipBetting:
         while True:
             if self.model is not None and self.scaler is not None:
                 prediction = predict_next_bet(self.model, self.scaler)
-                self.current_bet = calculate_bet_amount(prediction, self.current_bet, self.consecutive_losses,
-                                                        self.min_bet)
+                self.current_bet = calculate_bet_amount(prediction, self.current_bet, self.consecutive_losses, self.min_bet, self.balance)
             else:
-                prediction = 0.5  # Default to 50% win probability
+                prediction = 0.5
                 self.current_bet = self.min_bet
 
             logging.info(f"Placing bet: /cf {int(self.current_bet)} with current balance: {self.balance}")
@@ -93,10 +75,9 @@ class CoinFlipBetting:
             self.total_bets += 1
             win_rate = self.total_wins / self.total_bets if self.total_bets > 0 else 0
 
-            logging.info(
-                f"Total bets: {self.total_bets}, Total wins: {self.total_wins}, Total losses: {self.total_losses}, Win rate: {win_rate:.2f}")
+            logging.info(f"Total bets: {self.total_bets}, Total wins: {self.total_wins}, Total losses: {self.total_losses}, Win rate: {win_rate:.2f}")
 
-            save_to_database(outcome, self.current_bet, self.consecutive_losses)  # Save the result to the database
+            save_to_database(outcome, self.current_bet, self.consecutive_losses)
 
             logging.info(f"Balance after bet: {self.balance}")
 
@@ -104,16 +85,16 @@ class CoinFlipBetting:
             if self.flips_since_last_train >= self.retrain_interval:
                 self.retrain_model()
 
-            time.sleep(10)  # Wait 10 seconds after receiving the result before placing the next bet
+            time.sleep(10)
 
     def execute_bet_sequence(self, bet_amount):
-        time.sleep(5)  # Wait 5 seconds before starting the bet sequence
+        time.sleep(5)
         pyautogui.typewrite('t')
-        time.sleep(1)  # Wait 1 second before typing the bet command
+        time.sleep(1)
         pyautogui.typewrite(f'/cf {int(bet_amount)}')
-        time.sleep(1)  # Wait 1 second before pressing enter
+        time.sleep(1)
         pyautogui.press('enter')
-        time.sleep(1)  # Wait 1 second before clicking
+        time.sleep(1)
         for dx in [-1, 1]:
             for dy in [-1, 1]:
                 pyautogui.click(self.click_coords[0] + dx, self.click_coords[1] + dy)
@@ -141,8 +122,6 @@ class CoinFlipBetting:
     def backup_database(self):
         logging.info("Backing up database...")
         backup_database()
-    #
-
 
 if __name__ == '__main__':
     betting_system = CoinFlipBetting()
