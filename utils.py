@@ -1,3 +1,5 @@
+from datetime import time
+
 import pyautogui
 import cv2
 import pytesseract

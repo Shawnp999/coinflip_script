@@ -126,3 +126,4 @@ class CoinFlipBetting:
 if __name__ == '__main__':
     betting_system = CoinFlipBetting()
     betting_system.start()
+

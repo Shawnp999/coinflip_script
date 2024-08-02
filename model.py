@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 import tensorflow as tf
 from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Dense, LSTM
+from tensorflow.keras.layers import Dense, LSTM, Dropout
 from sklearn.preprocessing import MinMaxScaler
 import logging
 import joblib
@@ -43,8 +43,9 @@ def prepare_data(sequence_length=50):
     data['consecutive_losses'] = data['consecutive_losses_or_wins']
     data.loc[data['result'] == 1, 'consecutive_losses'] = 0
 
+    features = ['total_winrate', 'recent_winrate', 'consecutive_losses', 'amount', 'consecutive_losses_or_wins']
     scaler = MinMaxScaler()
-    X = scaler.fit_transform(data[['total_winrate', 'recent_winrate', 'consecutive_losses', 'amount', 'consecutive_losses_or_wins']])
+    X = scaler.fit_transform(data[features])
 
     logging.info(f"Number of features: {X.shape[1]}")
 
@@ -57,7 +58,10 @@ def prepare_data(sequence_length=50):
 
 def create_model(input_shape):
     model = Sequential([
-        LSTM(50, input_shape=input_shape, return_sequences=True),
+        LSTM(100, input_shape=input_shape, return_sequences=True),
+        Dropout(0.2),
+        LSTM(50, return_sequences=True),
+        Dropout(0.2),
         Dense(1, activation='sigmoid')
     ])
     model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
@@ -69,7 +73,7 @@ def train_model():
         logging.warning("Not enough data to train the model. Please play more games.")
         return None, None
     model = create_model((X.shape[1], X.shape[2]))
-    model.fit(X, y, epochs=100, batch_size=1, verbose=1)
+    model.fit(X, y, epochs=200, batch_size=1, verbose=1, validation_split=0.2)
     model.save(MODEL_PATH)
     joblib.dump(scaler, SCALER_PATH)
     return model, scaler
@@ -94,7 +98,7 @@ def load_model_and_scaler():
         scaler = joblib.load(SCALER_PATH)
     return model, scaler
 
-def calculate_bet_amount(prediction, last_bet, consecutive_losses, min_bet=10000, multiplier=2.2, balance=0):
+def calculate_bet_amount(prediction, last_bet, consecutive_losses, min_bet=10000, multiplier=2.1, balance=0):
     if prediction > 0.5:
         confidence = (prediction - 0.5) * 2
         bet = min_bet * (1 + confidence)
@@ -107,7 +111,7 @@ def calculate_bet_amount(prediction, last_bet, consecutive_losses, min_bet=10000
     return bet if bet > 0 else min_bet
 
 def backup_database():
-    conn = sqlite3.connect(DATABASE_NAME)
+    conn = sqlite3.connect('coinflips.db')
     df = pd.read_sql_query("SELECT * FROM Coinflips", conn)
     df.to_csv(BACKUP_PATH, index=False)
     conn.close()
