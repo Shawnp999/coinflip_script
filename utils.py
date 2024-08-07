@@ -1,5 +1,4 @@
-from datetime import time
-
+import time
 import pyautogui
 import cv2
 import pytesseract
@@ -24,9 +23,12 @@ def detect_outcome(screenshot):
         logging.error(f"Error during OCR: {e}")
         return None
 
-    if 'You have won the coinflip' in text:
+    # Clean and normalize the text
+    text = text.lower().strip()
+
+    if 'you have won the coinflip' in text:
         return 'win'
-    elif 'You have lost the coinflip' in text:
+    elif 'you have lost the coinflip' in text:
         return 'lose'
     return None
 

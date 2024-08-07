@@ -25,6 +25,19 @@ def create_database():
     finally:
         conn.close()
 
+def reset_database():
+    try:
+        conn = sqlite3.connect(DATABASE_NAME)
+        cursor = conn.cursor()
+        cursor.execute('DROP TABLE IF EXISTS Coinflips')
+        conn.commit()
+        create_database()
+        logging.info("Database reset successfully.")
+    except Exception as e:
+        logging.error(f"Error resetting database: {e}")
+    finally:
+        conn.close()
+
 def fetch_recent_results(limit=1000):
     try:
         conn = sqlite3.connect(DATABASE_NAME)
@@ -34,6 +47,7 @@ def fetch_recent_results(limit=1000):
             ORDER BY id DESC LIMIT ?
         ''', (limit,))
         results = cursor.fetchall()
+        logging.info(f"Fetched {len(results)} recent results from database.")
         return results
     except Exception as e:
         logging.error(f"Error fetching recent results: {e}")
@@ -52,14 +66,22 @@ def save_to_database(result, amount, consecutive_losses):
             VALUES (?, ?, ?, ?)
         ''', (result_boolean, amount, now, consecutive_losses))
         conn.commit()
-        logging.info("Result saved to database.")
+        logging.info(f"Result '{result}' saved to database with amount {amount} and consecutive_losses {consecutive_losses}.")
     except Exception as e:
         logging.error(f"Error saving to database: {e}")
     finally:
         conn.close()
 
 def fetch_all_results():
-    conn = sqlite3.connect(DATABASE_NAME)
-    df = pd.read_sql_query("SELECT * FROM Coinflips", conn)
-    conn.close()
-    return df
+    try:
+        conn = sqlite3.connect(DATABASE_NAME)
+        df = pd.read_sql_query("SELECT * FROM Coinflips", conn)
+        conn.close()
+        return df
+    except Exception as e:
+        logging.error(f"Error fetching all results: {e}")
+        return pd.DataFrame()
+
+def validate_database_contents():
+    df = fetch_all_results()
+    logging.info(f"Database contents:\n{df}")

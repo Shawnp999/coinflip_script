@@ -8,7 +8,8 @@ from tensorflow.keras.layers import Dense, LSTM, Dropout
 from sklearn.preprocessing import MinMaxScaler
 import logging
 import joblib
-from database import fetch_all_results
+
+from database import fetch_all_results, DATABASE_NAME
 
 MODEL_PATH = 'coinflip_model.h5'
 SCALER_PATH = 'scaler.pkl'
@@ -16,15 +17,12 @@ BACKUP_PATH = 'coinflips_backup.csv'
 
 def prepare_data(sequence_length=50):
     data = fetch_all_results()
-    if len(data) == 0:
+    if data.empty:
         logging.warning("No data available. Unable to prepare data for the model.")
         return None, None, None
 
     data['datetime'] = pd.to_datetime(data['datetime'], errors='coerce')
-    data = data.dropna(subset=['datetime'])
-
-    data = data.sort_values('datetime', ascending=False).reset_index(drop=True)
-    data = data.head(sequence_length)
+    data = data.dropna(subset=['datetime']).sort_values('datetime', ascending=False).reset_index(drop=True)
 
     if len(data) < sequence_length:
         pad_length = sequence_length - len(data)
@@ -32,16 +30,21 @@ def prepare_data(sequence_length=50):
             'result': [0.5] * pad_length,
             'amount': [10000] * pad_length,
             'datetime': [data['datetime'].min()] * pad_length,
-            'consecutive_losses_or_wins': [0] * pad_length
+            'consecutive_losses_or_wins': [0] * pad_length,
+            'balance': [data['amount'].sum()] * pad_length
         })
         data = pd.concat([pad_data, data]).reset_index(drop=True)
 
     data = data.iloc[::-1].reset_index(drop=True)
 
+    logging.info(f"Data used for training: {data}")
+
     data['total_winrate'] = data['result'].cumsum() / (data.index + 1)
     data['recent_winrate'] = data['result'].rolling(window=10).mean().fillna(0.5)
     data['consecutive_losses'] = data['consecutive_losses_or_wins']
     data.loc[data['result'] == 1, 'consecutive_losses'] = 0
+
+    data['balance'] = data['amount'].cumsum()
 
     features = ['total_winrate', 'recent_winrate', 'consecutive_losses', 'amount', 'consecutive_losses_or_wins']
     scaler = MinMaxScaler()
@@ -72,7 +75,7 @@ def train_model():
     if X is None or y is None:
         logging.warning("Not enough data to train the model. Please play more games.")
         return None, None
-    model = create_model((X.shape[1], X.shape[2]))
+    model = create_model((X.shape[2], X.shape[1]))  # Fix input shape
     model.fit(X, y, epochs=200, batch_size=1, verbose=1, validation_split=0.2)
     model.save(MODEL_PATH)
     joblib.dump(scaler, SCALER_PATH)
@@ -98,20 +101,37 @@ def load_model_and_scaler():
         scaler = joblib.load(SCALER_PATH)
     return model, scaler
 
-def calculate_bet_amount(prediction, last_bet, consecutive_losses, min_bet=10000, multiplier=2.1, balance=0):
+def calculate_bet_amount(prediction, balance, min_bet=10000, max_bet_fraction=0.5, loss_streak_multiplier=1.5, win_streak_multiplier=1.1):
+    """
+    Calculate the bet amount based on the model prediction, balance, and additional factors.
+
+    Parameters:
+    - prediction: Probability of winning (from the model).
+    - balance: Current balance.
+    - min_bet: Minimum bet amount.
+    - max_bet_fraction: Maximum fraction of the balance to bet.
+    - loss_streak_multiplier: Multiplier to increase bet after losses.
+    - win_streak_multiplier: Multiplier to adjust bet after wins.
+
+    Returns:
+    - bet_amount: Calculated bet amount.
+    """
     if prediction > 0.5:
-        confidence = (prediction - 0.5) * 2
-        bet = min_bet * (1 + confidence)
+        base_bet = balance * win_streak_multiplier * prediction
     else:
-        bet = last_bet * multiplier ** consecutive_losses
+        base_bet = balance * loss_streak_multiplier * (1 - prediction)
 
-    bet = int(bet)
-    bet = min(bet, balance)
+    # Ensure the bet amount is at least min_bet and not more than a fraction of the balance
+    bet_amount = max(min_bet, int(base_bet))
+    bet_amount = min(bet_amount, balance * max_bet_fraction)
 
-    return bet if bet > 0 else min_bet
+    logging.info(f"Calculated bet amount: {bet_amount}, based on prediction: {prediction:.2f}, balance: {balance}")
+
+    return bet_amount
+
 
 def backup_database():
-    conn = sqlite3.connect('coinflips.db')
+    conn = sqlite3.connect(DATABASE_NAME)
     df = pd.read_sql_query("SELECT * FROM Coinflips", conn)
     df.to_csv(BACKUP_PATH, index=False)
     conn.close()
