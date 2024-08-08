@@ -4,7 +4,8 @@ import numpy as np
 import pandas as pd
 import tensorflow as tf
 from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Dense, LSTM, Dropout
+from tensorflow.keras.layers import Dense, LSTM, Dropout, BatchNormalization
+from tensorflow.keras.regularizers import l2
 from sklearn.preprocessing import MinMaxScaler
 import logging
 import joblib
@@ -45,26 +46,41 @@ def prepare_data(sequence_length=50):
     data.loc[data['result'] == 1, 'consecutive_losses'] = 0
 
     data['balance'] = data['amount'].cumsum()
+    data['win_streak'] = (data['result'] != data['result'].shift(1)).cumsum()
+    data.loc[data['result'] == 0, 'win_streak'] = 0
+    data['loss_streak'] = (data['result'] != data['result'].shift(1)).cumsum()
+    data.loc[data['result'] == 1, 'loss_streak'] = 0
 
-    features = ['total_winrate', 'recent_winrate', 'consecutive_losses', 'amount', 'consecutive_losses_or_wins']
+    data['rolling_win_rate_10'] = data['result'].rolling(window=10).mean()
+    data['rolling_win_rate_20'] = data['result'].rolling(window=20).mean()
+    data['rolling_win_rate_50'] = data['result'].rolling(window=50).mean()
+
+    data['bet_amount_ratio'] = data['amount'] / data['balance']
+    data['profit_loss'] = data['result'].apply(lambda x: 1 if x else -1) * data['amount']
+    data['cumulative_profit_loss'] = data['profit_loss'].cumsum()
+
+    features = ['total_winrate', 'recent_winrate', 'consecutive_losses', 'amount', 'consecutive_losses_or_wins',
+                'win_streak', 'loss_streak', 'rolling_win_rate_10', 'rolling_win_rate_20', 'rolling_win_rate_50',
+                'bet_amount_ratio', 'cumulative_profit_loss']
+
     scaler = MinMaxScaler()
     X = scaler.fit_transform(data[features])
-
-    logging.info(f"Number of features: {X.shape[1]}")
-
     y = data['result'].values
-
-    X = X.reshape((1, X.shape[0], X.shape[1]))
-    y = y.reshape((1, y.shape[0], 1))
 
     return X, y, scaler
 
 def create_model(input_shape):
     model = Sequential([
-        LSTM(100, input_shape=input_shape, return_sequences=True),
-        Dropout(0.2),
-        LSTM(50, return_sequences=True),
-        Dropout(0.2),
+        LSTM(128, input_shape=(None, input_shape), return_sequences=True, kernel_regularizer=l2(0.01)),
+        BatchNormalization(),
+        Dropout(0.3),
+        LSTM(64, return_sequences=True, kernel_regularizer=l2(0.01)),
+        BatchNormalization(),
+        Dropout(0.3),
+        LSTM(32, kernel_regularizer=l2(0.01)),
+        BatchNormalization(),
+        Dropout(0.3),
+        Dense(16, activation='relu', kernel_regularizer=l2(0.01)),
         Dense(1, activation='sigmoid')
     ])
     model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
@@ -72,22 +88,39 @@ def create_model(input_shape):
 
 def train_model():
     X, y, scaler = prepare_data()
-    if X is None or y is None:
+    if X is None or y is None or len(X) < 2:  # Check if there are at least 2 samples
         logging.warning("Not enough data to train the model. Please play more games.")
         return None, None
-    model = create_model((X.shape[2], X.shape[1]))  # Fix input shape
-    model.fit(X, y, epochs=200, batch_size=1, verbose=1, validation_split=0.2)
+
+    model = create_model(X.shape[1])  # Pass the number of features
+
+    early_stopping = tf.keras.callbacks.EarlyStopping(patience=10, restore_best_weights=True)
+
+    # Reshape X for LSTM input
+    X = X.reshape((X.shape[0], 1, X.shape[1]))
+
+    model.fit(X, y, epochs=300, batch_size=32, verbose=1, validation_split=0.2, callbacks=[early_stopping])
     model.save(MODEL_PATH)
     joblib.dump(scaler, SCALER_PATH)
     return model, scaler
 
 def predict_next_bet(model, scaler):
     X, _, _ = prepare_data()
-    if X is None:
+    if X is None or len(X) == 0:
         logging.warning("Not enough data to make a prediction. Using default 50% win probability.")
         return 0.5
-    prediction = model.predict(X)
-    return prediction[0][-1][0]
+
+    # Use only the most recent data point
+    latest_data = X[-1].reshape(1, -1)
+
+    # Scale the data
+    scaled_data = scaler.transform(latest_data)
+
+    # Reshape for LSTM input (samples, time steps, features)
+    X_reshaped = scaled_data.reshape((1, 1, scaled_data.shape[1]))
+
+    prediction = model.predict(X_reshaped)
+    return prediction[0][0]
 
 def load_model_and_scaler():
     if not os.path.exists(MODEL_PATH) or not os.path.exists(SCALER_PATH):
@@ -101,34 +134,12 @@ def load_model_and_scaler():
         scaler = joblib.load(SCALER_PATH)
     return model, scaler
 
-def calculate_bet_amount(prediction, balance, min_bet=10000, max_bet_fraction=0.5, loss_streak_multiplier=1.5, win_streak_multiplier=1.1):
-    """
-    Calculate the bet amount based on the model prediction, balance, and additional factors.
-
-    Parameters:
-    - prediction: Probability of winning (from the model).
-    - balance: Current balance.
-    - min_bet: Minimum bet amount.
-    - max_bet_fraction: Maximum fraction of the balance to bet.
-    - loss_streak_multiplier: Multiplier to increase bet after losses.
-    - win_streak_multiplier: Multiplier to adjust bet after wins.
-
-    Returns:
-    - bet_amount: Calculated bet amount.
-    """
-    if prediction > 0.5:
-        base_bet = balance * win_streak_multiplier * prediction
-    else:
-        base_bet = balance * loss_streak_multiplier * (1 - prediction)
-
-    # Ensure the bet amount is at least min_bet and not more than a fraction of the balance
+def calculate_bet_amount(prediction, balance, min_bet=10000, max_bet_fraction=0.1):
+    confidence = abs(prediction - 0.5) * 2
+    base_bet = balance * max_bet_fraction * confidence
     bet_amount = max(min_bet, int(base_bet))
     bet_amount = min(bet_amount, balance * max_bet_fraction)
-
-    logging.info(f"Calculated bet amount: {bet_amount}, based on prediction: {prediction:.2f}, balance: {balance}")
-
     return bet_amount
-
 
 def backup_database():
     conn = sqlite3.connect(DATABASE_NAME)

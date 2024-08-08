@@ -1,3 +1,5 @@
+# utils.py
+
 import time
 import pyautogui
 import cv2
@@ -23,7 +25,6 @@ def detect_outcome(screenshot):
         logging.error(f"Error during OCR: {e}")
         return None
 
-    # Clean and normalize the text
     text = text.lower().strip()
 
     if 'you have won the coinflip' in text:

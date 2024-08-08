@@ -1,4 +1,6 @@
 import time
+
+import pandas as pd
 import pyautogui
 import logging
 import schedule
@@ -10,7 +12,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 
 class CoinFlipBetting:
     def __init__(self):
-        self.model, self.scaler = load_model_and_scaler()
+        self.model, self.scaler = train_model()  # Force retrain with new features
         self.min_bet = 10000
         self.current_bet = self.min_bet
         self.consecutive_losses = 0
@@ -20,6 +22,7 @@ class CoinFlipBetting:
         self.total_wins = 0
         self.total_losses = 0
         self.balance = 0
+        self.performance_log = []
         self.click_coords = (820, 410)
         screen_width, screen_height = pyautogui.size()
         self.region_width = 1100
@@ -45,59 +48,74 @@ class CoinFlipBetting:
             time.sleep(1)
 
     def place_bet(self):
-        if self.model is not None and self.scaler is not None:
-            prediction = predict_next_bet(self.model, self.scaler)
-            self.current_bet = calculate_bet_amount(prediction, self.balance, self.min_bet)
-        else:
-            prediction = 0.5
-            self.current_bet = self.min_bet
+        max_retries = 3
+        for attempt in range(max_retries):
+            if self.model is not None and self.scaler is not None:
+                prediction = predict_next_bet(self.model, self.scaler)
+                self.current_bet = calculate_bet_amount(prediction, self.balance, self.min_bet)
+            else:
+                prediction = 0.5
+                self.current_bet = self.min_bet
 
-        # Ensure the bet amount is at least the minimum bet
-        if self.current_bet < self.min_bet:
-            self.current_bet = self.min_bet
+            if 0.45 <= prediction <= 0.55:
+                logging.info(f"Prediction uncertain ({prediction:.2f}). Attempt {attempt + 1}/{max_retries}")
+                if attempt < max_retries - 1:
+                    time.sleep(30)
+                    continue
+                else:
+                    logging.info("Max retries reached. Using minimum bet as fallback.")
+                    self.current_bet = self.min_bet
 
-        logging.info(f"Placing bet: /cf {int(self.current_bet)} with current balance: {self.balance}")
-        self.execute_bet_sequence(self.current_bet)
+            try:
+                self.execute_bet_sequence(self.current_bet)
 
-        outcome = self.wait_for_result(self.region)
-        if outcome is None:
-            logging.warning("Timed out waiting for result.")
-            return
+                # Wait for and detect the result
+                outcome = self.wait_for_result(self.region)
+                if outcome is not None:
+                    self.handle_outcome(outcome)
+                    break  # Exit the retry loop if we got a result
+                else:
+                    logging.warning("Failed to detect result. Retrying...")
+            except Exception as e:
+                logging.error(f"Error during bet sequence: {e}")
+                if attempt == max_retries - 1:
+                    raise
 
-        self.handle_outcome(outcome)
-
-        logging.info(f"Balance after bet: {self.balance}")
-
-        self.flips_since_last_train += 1
-        if self.flips_since_last_train >= self.retrain_interval:
-            self.retrain_model()
-
+        # After attempting to place a bet (whether successful or not), wait before the next iteration
         time.sleep(10)
 
     def execute_bet_sequence(self, bet_amount):
-        time.sleep(5)
-        pyautogui.typewrite('t')
-        time.sleep(1)
-        pyautogui.typewrite(f'/cf {int(bet_amount)}')
-        time.sleep(1)
-        pyautogui.press('enter')
-        time.sleep(1)
-        for dx in [-1, 1]:
-            for dy in [-1, 1]:
-                pyautogui.click(self.click_coords[0] + dx, self.click_coords[1] + dy)
-                time.sleep(0.5)
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                time.sleep(5)
+                pyautogui.typewrite('t')
+                time.sleep(1)
+                pyautogui.typewrite(f'/cf {int(bet_amount)}')
+                time.sleep(1)
+                pyautogui.press('enter')
+                time.sleep(1)
+                for dx in [-1, 1]:
+                    for dy in [-1, 1]:
+                        pyautogui.click(self.click_coords[0] + dx, self.click_coords[1] + dy)
+                        time.sleep(0.5)
+                return
+            except Exception as e:
+                logging.error(f"Error executing bet sequence (attempt {attempt + 1}): {e}")
+                if attempt == max_retries - 1:
+                    raise
 
     def wait_for_result(self, region):
         timeout = 60
         start_time = time.time()
-        outcome = None
-        while outcome is None and (time.time() - start_time) < timeout:
+        while (time.time() - start_time) < timeout:
             screenshot = capture_screen(region=region)
             outcome = detect_outcome(screenshot)
-            if outcome is None:
-                logging.info("Waiting for result...")
-                time.sleep(3)
-        return outcome
+            if outcome is not None:
+                return outcome
+            logging.info("Waiting for result...")
+            time.sleep(3)
+        return None
 
     def handle_outcome(self, outcome):
         if outcome == 'win':
@@ -117,6 +135,30 @@ class CoinFlipBetting:
         logging.info(f"Total bets: {self.total_bets}, Total wins: {self.total_wins}, Total losses: {self.total_losses}, Win rate: {win_rate:.2f}")
 
         save_to_database(outcome, self.current_bet, self.consecutive_losses)
+
+        performance_entry = {
+            'timestamp': time.time(),
+            'bet_amount': self.current_bet,
+            'outcome': outcome,
+            'balance': self.balance,
+            'win_rate': win_rate
+        }
+        self.performance_log.append(performance_entry)
+
+        if len(self.performance_log) % 100 == 0:
+            self.analyze_performance()
+
+    def analyze_performance(self):
+        df = pd.DataFrame(self.performance_log)
+        df['cumulative_profit'] = df['balance'] - df['balance'].iloc[0]
+        df['rolling_win_rate'] = df['outcome'].apply(lambda x: 1 if x == 'win' else 0).rolling(window=50).mean()
+
+        logging.info(f"Performance analysis:")
+        logging.info(f"Total profit: {df['cumulative_profit'].iloc[-1]}")
+        logging.info(f"Current win rate: {df['rolling_win_rate'].iloc[-1]:.2f}")
+        logging.info(f"Average bet amount: {df['bet_amount'].mean():.2f}")
+
+        df.to_csv('performance_log.csv', index=False)
 
     def retrain_model(self):
         logging.info("Retraining model...")
