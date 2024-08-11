@@ -87,3 +87,17 @@ def fetch_all_results():
 def validate_database_contents():
     df = fetch_all_results()
     logging.info(f"Database contents:\n{df}")
+
+def calculate_win_rates(results):
+    total_games = len(results)
+    total_wins = sum(result[0] for result in results)
+
+    win_rate_total = total_wins / total_games if total_games > 0 else 0
+
+    recent_50 = results[:50]
+    recent_20 = results[:20]
+
+    win_rate_50 = sum(result[0] for result in recent_50) / len(recent_50) if recent_50 else 0
+    win_rate_20 = sum(result[0] for result in recent_20) / len(recent_20) if recent_20 else 0
+
+    return win_rate_total, win_rate_50, win_rate_20

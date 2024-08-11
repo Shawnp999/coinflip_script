@@ -1,3 +1,5 @@
+# model.py
+
 import os
 import sqlite3
 import numpy as np
@@ -64,7 +66,7 @@ def prepare_data(sequence_length=50):
                 'bet_amount_ratio', 'cumulative_profit_loss']
 
     scaler = MinMaxScaler()
-    X = scaler.fit_transform(data[features])
+    X = pd.DataFrame(scaler.fit_transform(data[features]), columns=features)
     y = data['result'].values
 
     return X, y, scaler
@@ -97,7 +99,7 @@ def train_model():
     early_stopping = tf.keras.callbacks.EarlyStopping(patience=10, restore_best_weights=True)
 
     # Reshape X for LSTM input
-    X = X.reshape((X.shape[0], 1, X.shape[1]))
+    X = X.values.reshape((X.shape[0], 1, X.shape[1]))
 
     model.fit(X, y, epochs=300, batch_size=32, verbose=1, validation_split=0.2, callbacks=[early_stopping])
     model.save(MODEL_PATH)
@@ -111,7 +113,7 @@ def predict_next_bet(model, scaler):
         return 0.5
 
     # Use only the most recent data point
-    latest_data = X[-1].reshape(1, -1)
+    latest_data = X.iloc[-1].values.reshape(1, -1)
 
     # Scale the data
     scaled_data = scaler.transform(latest_data)
