@@ -1,11 +1,9 @@
-# database.py
-
 import sqlite3
 import pandas as pd
 from datetime import datetime
 import logging
 
-DATABASE_NAME = 'coinflips.db'
+DATABASE_NAME = 'TrustyToilet.db'
 
 def create_database():
     try:
@@ -49,7 +47,10 @@ def fetch_recent_results(limit=1000):
             ORDER BY id DESC LIMIT ?
         ''', (limit,))
         results = cursor.fetchall()
-        logging.info(f"Fetched {len(results)} recent results from database.")
+        if len(results) == 0:
+            logging.info("Database is empty. Starting with a minimum bet.")
+        else:
+            logging.info(f"Fetched {len(results)} recent results from database.")
         return results
     except Exception as e:
         logging.error(f"Error fetching recent results: {e}")

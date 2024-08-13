@@ -12,7 +12,6 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 class CoinFlipBetting:
     def __init__(self):
         self.min_bet = 10000
-        self.max_bet_fraction = 0.1
         self.current_bet = self.min_bet
         self.consecutive_losses = 0
         self.consecutive_wins = 0
@@ -23,19 +22,31 @@ class CoinFlipBetting:
         self.initial_balance = 0
         self.performance_log = []
         self.click_coords = (820, 410)
+        self.high_loss_coords = (970, 410)
         screen_width, screen_height = pyautogui.size()
         self.region_width = 1100
         self.region_height = 1000
         self.region_left = 0
         self.region_top = screen_height - self.region_height
         self.region = (self.region_left, self.region_top, self.region_width, self.region_height)
-        self.confidence = 0.5
-        self.low_confidence_threshold = 0.6
-        self.stop_loss = 0.5  # Allow losses up to 50% of initial balance
-        self.take_profit = 0.5
-        self.aggressive_mode = False
-        self.aggressive_bet = 0
         create_database()
+
+    def initialize_from_recent_results(self):
+        recent_results = fetch_recent_results(limit=10)  # Fetch last 10 results
+        if recent_results:
+            # Count consecutive losses from the most recent result
+            for result in recent_results:
+                if result[0] == 0:  # 0 indicates a loss
+                    self.consecutive_losses += 1
+                else:
+                    break  # Stop counting at the first win
+
+            # Set the current bet based on consecutive losses
+            self.current_bet = self.calculate_bet_amount()
+
+            logging.info(f"Initialized from recent results. Consecutive losses: {self.consecutive_losses}, Starting bet: {self.current_bet}")
+        else:
+            logging.info("No recent results found. Starting with minimum bet.")
 
     def start(self):
         try:
@@ -45,36 +56,33 @@ class CoinFlipBetting:
             logging.error("Invalid input for balance. Please enter an integer value.")
             return
 
+        self.initialize_from_recent_results()
+
+        logging.info(f"Initial balance: {self.balance}")
+        logging.info(f"Initial consecutive losses: {self.consecutive_losses}")
+        logging.info(f"Initial bet amount: {self.current_bet}")
+
         schedule.every().day.at("00:00").do(self.backup_database)
 
         while True:
-            if self.check_stop_conditions():
+            if self.consecutive_losses > 10:
+                logging.info("More than 10 consecutive losses. Stopping the script.")
                 break
             self.place_bet()
             schedule.run_pending()
             time.sleep(1)
 
+        logging.info("Betting session ended.")
+
     def place_bet(self):
         max_retries = 3
         for attempt in range(max_retries):
-            results = fetch_recent_results(1000)
-            win_rate_total, win_rate_50, win_rate_20 = calculate_win_rates(results)
-
-            logging.info(f"Total win rate: {win_rate_total:.2f}")
-            logging.info(f"Last 50 games win rate: {win_rate_50:.2f}")
-            logging.info(f"Last 20 games win rate: {win_rate_20:.2f}")
-
-            if not self.aggressive_mode:
-                self.update_confidence(win_rate_total, win_rate_50, win_rate_20)
             self.current_bet = self.calculate_bet_amount()
-            logging.info(f"Confidence: {self.confidence:.2f}, Calculated bet amount: {self.current_bet}")
-
-            if not self.aggressive_mode and self.confidence <= self.low_confidence_threshold:
-                self.current_bet = self.get_min_bet()
-                logging.info(f"Low confidence. Placing minimum bet: {self.current_bet}")
+            logging.info(f"Placing bet: {self.current_bet}")
 
             try:
-                self.execute_bet_sequence(self.current_bet)
+                coords = self.high_loss_coords if self.consecutive_losses >= 5 else self.click_coords
+                self.execute_bet_sequence(self.current_bet, coords)
                 outcome = self.wait_for_result(self.region)
                 if outcome is not None:
                     self.handle_outcome(outcome)
@@ -88,36 +96,27 @@ class CoinFlipBetting:
 
         time.sleep(10)
 
-    def get_min_bet(self):
-        return min(self.min_bet, self.balance)
-
-    def update_confidence(self, win_rate_total, win_rate_50, win_rate_20):
-        if win_rate_20 < 0.4 and win_rate_50 < 0.45 and win_rate_total < 0.48:
-            self.confidence = min(1.0, self.confidence + 0.1)
-        elif win_rate_20 > 0.6 or win_rate_50 > 0.55:
-            self.confidence = max(0.1, self.confidence - 0.1)
-
-        if self.consecutive_losses > 3:
-            self.confidence = min(1.0, self.confidence + 0.05 * (self.consecutive_losses - 3))
-        elif self.consecutive_wins > 3:
-            self.confidence = max(0.1, self.confidence - 0.05 * (self.consecutive_wins - 3))
-
     def calculate_bet_amount(self):
-        if self.aggressive_mode:
-            return self.round_to_nearest_10k(self.aggressive_bet)
-        base_bet = self.balance * self.max_bet_fraction * self.confidence
-        bet_amount = max(self.min_bet, int(base_bet))
-        bet_amount = min(bet_amount, self.balance * self.max_bet_fraction)
-        return self.round_to_nearest_10k(bet_amount)
+        logging.info(f"Calculating bet amount. Consecutive losses: {self.consecutive_losses}")
+        if self.consecutive_losses == 3:
+            bet = max(self.min_bet, self.round_to_nearest_10k(self.balance * 0.1))
+        elif self.consecutive_losses == 4:
+            bet = max(self.min_bet, self.round_to_nearest_10k(self.balance * 0.2))
+        elif self.consecutive_losses >= 5:
+            bet = self.handle_high_consecutive_losses()
+        else:
+            bet = self.min_bet
+        logging.info(f"Calculated bet amount: {bet}")
+        return bet
 
     def round_to_nearest_10k(self, amount):
         return round(amount / 10000) * 10000
 
-    def execute_bet_sequence(self, bet_amount):
+    def execute_bet_sequence(self, bet_amount, click_coords):
         max_retries = 3
         for attempt in range(max_retries):
             try:
-                send_command(f'/cf {int(bet_amount)}', click_coords=self.click_coords)
+                send_command(f'/cf {int(bet_amount)}', click_coords=click_coords)
                 return
             except Exception as e:
                 logging.error(f"Error executing bet sequence (attempt {attempt + 1}): {e}")
@@ -136,13 +135,28 @@ class CoinFlipBetting:
             time.sleep(3)
         return None
 
+    def handle_high_consecutive_losses(self):
+        if self.consecutive_losses == 5:
+            return 2
+        elif self.consecutive_losses == 6:
+            return 4
+        elif self.consecutive_losses == 7:
+            return 9
+        elif self.consecutive_losses == 8:
+            return 20
+        elif self.consecutive_losses == 9:
+            return 40
+        elif self.consecutive_losses == 10:
+            return 70
+        else:
+            return self.min_bet
+
     def handle_outcome(self, outcome):
         if outcome == 'win':
             self.balance += self.current_bet
             self.total_wins += 1
             self.consecutive_wins += 1
             self.consecutive_losses = 0
-            self.aggressive_mode = False
             logging.info(f"You won! New balance: {self.balance}")
         elif outcome == 'lose':
             self.balance -= self.current_bet
@@ -150,14 +164,6 @@ class CoinFlipBetting:
             self.consecutive_losses += 1
             self.consecutive_wins = 0
             logging.info(f"You lost. New balance: {self.balance}")
-
-            if self.consecutive_losses == 2:
-                self.aggressive_mode = True
-                self.aggressive_bet = self.round_to_nearest_10k(self.initial_balance * 0.04)
-                logging.info(f"Entering aggressive mode. Next bet: {self.aggressive_bet}")
-            elif self.consecutive_losses > 2 and self.aggressive_mode:
-                self.aggressive_bet = self.round_to_nearest_10k(self.aggressive_bet * 2.2)
-                logging.info(f"Increasing aggressive bet. Next bet: {self.aggressive_bet}")
 
         self.total_bets += 1
         win_rate = self.total_wins / self.total_bets if self.total_bets > 0 else 0
@@ -172,8 +178,7 @@ class CoinFlipBetting:
             'outcome': outcome,
             'balance': self.balance,
             'win_rate': win_rate,
-            'confidence': self.confidence,
-            'aggressive_mode': self.aggressive_mode
+            'consecutive_losses': self.consecutive_losses
         }
         self.performance_log.append(performance_entry)
 
@@ -189,18 +194,8 @@ class CoinFlipBetting:
         logging.info(f"Total profit: {df['cumulative_profit'].iloc[-1]}")
         logging.info(f"Current win rate: {df['rolling_win_rate'].iloc[-1]:.2f}")
         logging.info(f"Average bet amount: {df['bet_amount'].mean():.2f}")
-        logging.info(f"Average confidence: {df['confidence'].mean():.2f}")
 
         df.to_csv('performance_log.csv', index=False)
-
-    def check_stop_conditions(self):
-        if self.balance <= self.initial_balance * (1 - self.stop_loss):
-            logging.info(f"Stop loss reached. Stopping betting.")
-            return True
-        elif self.balance >= self.initial_balance * (1 + self.take_profit):
-            logging.info(f"Take profit reached. Stopping betting.")
-            return True
-        return False
 
     def backup_database(self):
         logging.info("Backing up database...")
