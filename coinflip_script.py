@@ -81,7 +81,7 @@ class CoinFlipBetting:
             logging.info(f"Placing bet: {self.current_bet}")
 
             try:
-                coords = self.high_loss_coords if self.consecutive_losses >= 5 else self.click_coords
+                coords = self.high_loss_coords if self.consecutive_losses >= 3 else self.click_coords
                 self.execute_bet_sequence(self.current_bet, coords)
                 outcome = self.wait_for_result(self.region)
                 if outcome is not None:
@@ -98,11 +98,11 @@ class CoinFlipBetting:
 
     def calculate_bet_amount(self):
         logging.info(f"Calculating bet amount. Consecutive losses: {self.consecutive_losses}")
-        if self.consecutive_losses == 3:
+        if self.consecutive_losses == 1:
+            bet = max(self.min_bet, self.round_to_nearest_10k(self.balance * 0.05))
+        if self.consecutive_losses == 2:
             bet = max(self.min_bet, self.round_to_nearest_10k(self.balance * 0.1))
-        elif self.consecutive_losses == 4:
-            bet = max(self.min_bet, self.round_to_nearest_10k(self.balance * 0.2))
-        elif self.consecutive_losses >= 5:
+        elif self.consecutive_losses >= 3:
             bet = self.handle_high_consecutive_losses()
         else:
             bet = self.min_bet
@@ -136,18 +136,22 @@ class CoinFlipBetting:
         return None
 
     def handle_high_consecutive_losses(self):
-        if self.consecutive_losses == 5:
+        if self.consecutive_losses == 3:
+            return 1
+        elif self.consecutive_losses == 4:
             return 2
+        elif self.consecutive_losses == 5:
+            return 5
         elif self.consecutive_losses == 6:
-            return 4
+            return 11
         elif self.consecutive_losses == 7:
-            return 9
+            return 24
         elif self.consecutive_losses == 8:
-            return 20
+            return 55
         elif self.consecutive_losses == 9:
-            return 40
+            return 110
         elif self.consecutive_losses == 10:
-            return 70
+            return 240
         else:
             return self.min_bet
 

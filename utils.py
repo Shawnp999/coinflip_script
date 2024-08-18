@@ -27,10 +27,17 @@ def detect_outcome(screenshot):
 
     text = text.lower().strip()
 
-    if 'you have won the coinflip' in text:
-        return 'win'
-    elif 'you have lost the coinflip' in text:
-        return 'lose'
+    win_phrases = ['you have won the coinflip', 'ou have won the coinflip', 'have won the coinflip']
+    lose_phrases = ['you have lost the coinflip', 'ou have lost the coinflip', 'have lost the coinflip']
+
+    for phrase in win_phrases:
+        if phrase in text:
+            return 'win'
+
+    for phrase in lose_phrases:
+        if phrase in text:
+            return 'lose'
+
     return None
 
 def send_command(command, delay=0.1, click_coords=None):
