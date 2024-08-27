@@ -65,7 +65,7 @@ class CoinFlipBetting:
         schedule.every().day.at("00:00").do(self.backup_database)
 
         while True:
-            if self.consecutive_losses > 10:
+            if self.consecutive_losses > 11:
                 logging.info("More than 10 consecutive losses. Stopping the script.")
                 break
             self.place_bet()
@@ -81,7 +81,7 @@ class CoinFlipBetting:
             logging.info(f"Placing bet: {self.current_bet}")
 
             try:
-                coords = self.high_loss_coords if self.consecutive_losses >= 3 else self.click_coords
+                coords = self.high_loss_coords if self.consecutive_losses >= 2 else self.click_coords
                 self.execute_bet_sequence(self.current_bet, coords)
                 outcome = self.wait_for_result(self.region)
                 if outcome is not None:
@@ -98,11 +98,11 @@ class CoinFlipBetting:
 
     def calculate_bet_amount(self):
         logging.info(f"Calculating bet amount. Consecutive losses: {self.consecutive_losses}")
+        if self.consecutive_losses == 0:
+            bet = max(self.min_bet, self.round_to_nearest_10k(self.balance * 0.03))
         if self.consecutive_losses == 1:
-            bet = max(self.min_bet, self.round_to_nearest_10k(self.balance * 0.05))
-        if self.consecutive_losses == 2:
-            bet = max(self.min_bet, self.round_to_nearest_10k(self.balance * 0.1))
-        elif self.consecutive_losses >= 3:
+            bet = max(self.min_bet, self.round_to_nearest_10k(self.balance * 0.06))
+        elif self.consecutive_losses >= 2:
             bet = self.handle_high_consecutive_losses()
         else:
             bet = self.min_bet
@@ -124,7 +124,7 @@ class CoinFlipBetting:
                     raise
 
     def wait_for_result(self, region):
-        timeout = 60
+        timeout = 420
         start_time = time.time()
         while (time.time() - start_time) < timeout:
             screenshot = capture_screen(region=region)
@@ -136,24 +136,52 @@ class CoinFlipBetting:
         return None
 
     def handle_high_consecutive_losses(self):
-        if self.consecutive_losses == 3:
+
+        if self.consecutive_losses == 2:
             return 1
+        elif self.consecutive_losses == 3:
+            return 3
         elif self.consecutive_losses == 4:
-            return 2
+            return 7
         elif self.consecutive_losses == 5:
-            return 5
+            return 15
         elif self.consecutive_losses == 6:
-            return 11
+            return 31
         elif self.consecutive_losses == 7:
-            return 24
+            return 65
         elif self.consecutive_losses == 8:
-            return 55
+            return 130
         elif self.consecutive_losses == 9:
-            return 110
+            return 260
         elif self.consecutive_losses == 10:
-            return 240
+            return 520
+        elif self.consecutive_losses == 11:
+            return 920
         else:
             return self.min_bet
+
+
+        # def handle_high_consecutive_losses(self):
+
+        # 1 3 6 13 28 55 110 220 440 880 1000
+        #     if self.consecutive_losses == 3:
+        #         return 2
+        #     elif self.consecutive_losses == 4:
+        #         return 5
+        #     elif self.consecutive_losses == 5:
+        #         return 11
+        #     elif self.consecutive_losses == 6:
+        #         return 24
+        #     elif self.consecutive_losses == 7:
+        #         return 50
+        #     elif self.consecutive_losses == 8:
+        #         return 102
+        #     elif self.consecutive_losses == 9:
+        #         return 210
+        #     elif self.consecutive_losses == 10:
+        #         return 450
+        #     else:
+        #         return self.min_bet
 
     def handle_outcome(self, outcome):
         if outcome == 'win':
