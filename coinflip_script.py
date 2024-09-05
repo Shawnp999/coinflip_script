@@ -9,6 +9,8 @@ from utils import capture_screen, detect_outcome, send_command, play_notificatio
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
+
+
 class CoinFlipBetting:
     def __init__(self):
         self.min_bet = 10000
@@ -146,42 +148,49 @@ class CoinFlipBetting:
         elif self.consecutive_losses == 5:
             return 15
         elif self.consecutive_losses == 6:
-            return 31
+            return 32
         elif self.consecutive_losses == 7:
-            return 65
+            return 66
         elif self.consecutive_losses == 8:
             return 130
         elif self.consecutive_losses == 9:
-            return 260
+            return 265
         elif self.consecutive_losses == 10:
-            return 520
+            return 530
         elif self.consecutive_losses == 11:
-            return 920
+            return 1000
+        elif self.consecutive_losses == 12:
+            return 2000
         else:
             return self.min_bet
 
 
-        # def handle_high_consecutive_losses(self):
-
-        # 1 3 6 13 28 55 110 220 440 880 1000
-        #     if self.consecutive_losses == 3:
-        #         return 2
-        #     elif self.consecutive_losses == 4:
-        #         return 5
-        #     elif self.consecutive_losses == 5:
-        #         return 11
-        #     elif self.consecutive_losses == 6:
-        #         return 24
-        #     elif self.consecutive_losses == 7:
-        #         return 50
-        #     elif self.consecutive_losses == 8:
-        #         return 102
-        #     elif self.consecutive_losses == 9:
-        #         return 210
-        #     elif self.consecutive_losses == 10:
-        #         return 450
-        #     else:
-        #         return self.min_bet
+    # if self.consecutive_losses == 3:
+    #     return 1
+    # elif self.consecutive_losses == 4:
+    #     return 2
+    # elif self.consecutive_losses == 5:
+    #     return 4
+    # elif self.consecutive_losses == 6:
+    #     return 8
+    # elif self.consecutive_losses == 7:
+    #     return 16
+    # elif self.consecutive_losses == 8:
+    #     return 32
+    # elif self.consecutive_losses == 9:
+    #     return 64
+    # elif self.consecutive_losses == 10:
+    #     return 128
+    # elif self.consecutive_losses == 11:
+    #     return 256
+    # elif self.consecutive_losses == 12:
+    #     return 512
+    # elif self.consecutive_losses == 13:
+    #     return 1000
+    # elif self.consecutive_losses == 14:
+    #     return 1000
+    # else:
+    #     return self.min_bet
 
     def handle_outcome(self, outcome):
         if outcome == 'win':
@@ -233,7 +242,10 @@ class CoinFlipBetting:
         logging.info("Backing up database...")
         backup_database()
 
+
+
 if __name__ == '__main__':
     validate_database_contents()
     betting_system = CoinFlipBetting()
     betting_system.start()
+
