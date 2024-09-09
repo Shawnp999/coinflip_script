@@ -83,7 +83,7 @@ class CoinFlipBetting:
             logging.info(f"Placing bet: {self.current_bet}")
 
             try:
-                coords = self.high_loss_coords if self.consecutive_losses >= 2 else self.click_coords
+                coords = self.high_loss_coords if self.consecutive_losses >= 3 else self.click_coords
                 self.execute_bet_sequence(self.current_bet, coords)
                 outcome = self.wait_for_result(self.region)
                 if outcome is not None:
@@ -100,11 +100,12 @@ class CoinFlipBetting:
 
     def calculate_bet_amount(self):
         logging.info(f"Calculating bet amount. Consecutive losses: {self.consecutive_losses}")
-        if self.consecutive_losses == 0:
-            bet = max(self.min_bet, self.round_to_nearest_10k(self.balance * 0.03))
+
         if self.consecutive_losses == 1:
+            bet = max(self.min_bet, self.round_to_nearest_10k(self.balance * 0.03))
+        elif self.consecutive_losses == 2:
             bet = max(self.min_bet, self.round_to_nearest_10k(self.balance * 0.06))
-        elif self.consecutive_losses >= 2:
+        elif self.consecutive_losses >= 3:
             bet = self.handle_high_consecutive_losses()
         else:
             bet = self.min_bet
@@ -139,25 +140,25 @@ class CoinFlipBetting:
 
     def handle_high_consecutive_losses(self):
 
-        if self.consecutive_losses == 2:
+        if self.consecutive_losses == 3:
             return 1
-        elif self.consecutive_losses == 3:
-            return 3
         elif self.consecutive_losses == 4:
-            return 7
+            return 3
         elif self.consecutive_losses == 5:
-            return 15
+            return 7
         elif self.consecutive_losses == 6:
-            return 32
+            return 15
         elif self.consecutive_losses == 7:
-            return 66
+            return 32
         elif self.consecutive_losses == 8:
-            return 130
+            return 66
         elif self.consecutive_losses == 9:
-            return 265
+            return 130
         elif self.consecutive_losses == 10:
-            return 530
+            return 265
         elif self.consecutive_losses == 11:
+            return 530
+        elif self.consecutive_losses == 12:
             return 1000
         elif self.consecutive_losses == 12:
             return 2000
@@ -181,14 +182,6 @@ class CoinFlipBetting:
     #     return 64
     # elif self.consecutive_losses == 10:
     #     return 128
-    # elif self.consecutive_losses == 11:
-    #     return 256
-    # elif self.consecutive_losses == 12:
-    #     return 512
-    # elif self.consecutive_losses == 13:
-    #     return 1000
-    # elif self.consecutive_losses == 14:
-    #     return 1000
     # else:
     #     return self.min_bet
 

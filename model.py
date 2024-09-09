@@ -2,12 +2,7 @@
 
 import os
 import sqlite3
-import numpy as np
 import pandas as pd
-import tensorflow as tf
-from tensorflow.keras.layers import Dense, LSTM, Dropout, BatchNormalization
-from tensorflow.keras.regularizers import l2
-from sklearn.preprocessing import MinMaxScaler
 import logging
 import joblib
 

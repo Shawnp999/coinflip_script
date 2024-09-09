@@ -25,6 +25,40 @@ def create_database():
     finally:
         conn.close()
 
+# DATABASE_NAME = 'NewDatabase.db'  # new name hjere
+#
+# def create_new_database():
+#     try:
+#
+#         conn = sqlite3.connect(DATABASE_NAME)
+#         cursor = conn.cursor()
+#
+#         # create a new table
+#         cursor.execute('''
+#             CREATE TABLE IF NOT EXISTS Coinflips (
+#                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+#                 result BOOLEAN,
+#                 amount INTEGER,
+#                 datetime DATETIME,
+#                 consecutive_losses_or_wins INTEGER
+#             )
+#         ''')
+#
+#         conn.commit()
+#         logging.info(f"Database '{DATABASE_NAME}' and 'Coinflips' table created successfully.")
+#
+#     except Exception as e:
+#         logging.error(f"Error creating new database: {e}")
+#
+#     finally:
+#         conn.close()
+#
+# # Call the function to create the database
+# create_new_database()
+
+
+
+
 def reset_database():
     try:
         conn = sqlite3.connect(DATABASE_NAME)
