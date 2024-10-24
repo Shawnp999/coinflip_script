@@ -3,13 +3,13 @@ import pandas as pd
 import pyautogui
 import logging
 import schedule
-from database import create_database, fetch_recent_results, save_to_database, calculate_win_rates, \
-    validate_database_contents, reset_database
+from database import create_database, fetch_recent_results, save_to_database, calculate_win_rates, validate_database_contents, reset_database
 from model import backup_database
 from utils import capture_screen, detect_outcome, send_command, play_notification_sound
 import random
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
 
 
 class CoinFlipBetting:
@@ -24,13 +24,11 @@ class CoinFlipBetting:
         self.total_losses = 0
         self.balance = 0
         self.initial_balance = 0
+        self.high_stakes_wins = 0  # Track high stakes wins
+        self.current_bet_is_high_stakes = False  # Flag to track if current bet is high stakes
         self.performance_log = []
         self.click_coords = (820, 410)
         self.high_loss_coords = (970, 410)
-        self.high_stakes_wins = 0  # Track high stakes wins
-        self.current_bet_is_high_stakes = False  # Flag to track if current bet is high stakes
-        self.last_loss_streak = 0  # Track the length of the last loss streak
-        self.use_high_loss_next = False
         screen_width, screen_height = pyautogui.size()
         self.region_width = 1100
         self.region_height = 1000
@@ -40,7 +38,7 @@ class CoinFlipBetting:
         create_database()
 
     def initialize_from_recent_results(self):
-        recent_results = fetch_recent_results(limit=10)  # Fetch last 10 results
+        recent_results = fetch_recent_results(limit=10)
         if recent_results:
             # Count consecutive losses from the most recent result
             for result in recent_results:
@@ -52,8 +50,7 @@ class CoinFlipBetting:
             # Set the current bet based on consecutive losses
             self.current_bet = self.calculate_bet_amount()
 
-            logging.info(
-                f"Initialized from recent results. Consecutive losses: {self.consecutive_losses}, Starting bet: {self.current_bet}")
+            logging.info(f"Initialized from recent results. Consecutive losses: {self.consecutive_losses}, Starting bet: {self.current_bet}")
         else:
             logging.info("No recent results found. Starting with minimum bet.")
 
@@ -74,8 +71,8 @@ class CoinFlipBetting:
         schedule.every().day.at("00:00").do(self.backup_database)
 
         while True:
-            if self.consecutive_losses > 11:
-                logging.info("More than 10 consecutive losses. Stopping the script.")
+            if self.consecutive_losses > 14:
+                logging.info("More than 14 consecutive losses. Stopping the script.")
                 break
             self.place_bet()
             schedule.run_pending()
@@ -90,7 +87,7 @@ class CoinFlipBetting:
             logging.info(f"Placing bet: {self.current_bet}")
 
             try:
-                coords = self.high_loss_coords if self.consecutive_losses >= 3 else self.click_coords
+                coords = self.high_loss_coords if self.consecutive_losses >= 1 else self.click_coords
                 self.execute_bet_sequence(self.current_bet, coords)
                 outcome = self.wait_for_result(self.region)
                 if outcome is not None:
@@ -109,23 +106,18 @@ class CoinFlipBetting:
     def calculate_bet_amount(self):
         logging.info(f"Calculating bet amount. Consecutive losses: {self.consecutive_losses}")
 
-        # Check if we should use high loss betting after winning a high loss streak
-        if self.use_high_loss_next:
-            self.use_high_loss_next = False  # Reset the flag
-            logging.info("Using high loss betting sequence once after winning high loss streak")
-            return self.handle_high_consecutive_losses()
 
-        # Original betting logic
-        if self.consecutive_losses == 1:
-            random_percentage = random.uniform(0.01, 0.04)
-            bet = max(self.min_bet, self.round_to_nearest_10k(self.balance * random_percentage))
-        elif self.consecutive_losses == 2:
-            bet = max(self.min_bet, self.round_to_nearest_10k(self.balance * 0.04))
-        elif self.consecutive_losses > 2:
+        # elif self.consecutive_losses == 3:
+        #     bet = max(self.min_bet, self.round_to_nearest_10k(self.balance * 0.02))
+        # # elif self.consecutive_losses == 3:
+        #     bet = max(self.min_bet, self.round_to_nearest_10k(self.balance * 0.06))
+        if self.consecutive_losses >= 1:
             bet = self.handle_high_consecutive_losses()
+            self.current_bet_is_high_stakes = True
+
         else:
             bet = self.min_bet
-
+            self.current_bet_is_high_stakes = False
         logging.info(f"Calculated bet amount: {bet}")
         return bet
 
@@ -155,7 +147,36 @@ class CoinFlipBetting:
             time.sleep(1)
         return None
 
-    # 1200
+    #1200
+
+
+    # def handle_high_consecutive_losses(self):
+    #
+    #     if self.consecutive_losses == 1:
+    #         return 1
+    #     elif self.consecutive_losses == 2:
+    #         return 2
+    #     elif self.consecutive_losses == 3:
+    #         return 4
+    #     elif self.consecutive_losses == 4:
+    #         return 8  # 4
+    #     elif self.consecutive_losses == 5:
+    #         return 16  # 5
+    #     elif self.consecutive_losses == 6:
+    #         return 32  # 6
+    #     elif self.consecutive_losses == 7:
+    #         return 64  # 7
+    #     elif self.consecutive_losses == 8:
+    #         return 128  #8
+    #     elif self.consecutive_losses == 9:
+    #         return 256  # 9
+    #     elif self.consecutive_losses == 10:
+    #         return 512 # 19
+    #     elif self.consecutive_losses == 11:
+    #         return 1000 # 19
+    #     else:
+    #         return self.min_bet
+
 
     def handle_high_consecutive_losses(self):
 
@@ -174,29 +195,29 @@ class CoinFlipBetting:
         elif self.consecutive_losses == 9:
             return 64  # 7
         elif self.consecutive_losses == 10:
-            return 128  # 8
+            return 128  #8
         elif self.consecutive_losses == 11:
             return 256  # 9
         elif self.consecutive_losses == 12:
-            return 512  # 19
+            return 512 # 19
         elif self.consecutive_losses == 13:
-            return 1000  # 19
+            return 1000 # 19
         else:
             return self.min_bet
 
 
     def handle_outcome(self, outcome):
-        # Store the current loss streak before processing the outcome
-        current_loss_streak = self.consecutive_losses
+
+        was_high_stakes = self.current_bet_is_high_stakes
 
         if outcome == 'win':
             self.balance += self.current_bet
             self.total_wins += 1
             self.consecutive_wins += 1
-            # If we just won after a high loss streak (>9), set flag for next bet
-            if current_loss_streak > 9:
-                self.use_high_loss_next = True
-                logging.info(f"Won after {current_loss_streak} losses. Will use high loss betting once.")
+            if was_high_stakes:  # If this was a high stakes win
+                self.high_stakes_wins += 1
+                logging.info(f"High stakes win! Multiplier was: {self.handle_high_consecutive_losses()}")
+                logging.info(f"Total high stakes wins: {self.high_stakes_wins}")
             self.consecutive_losses = 0
             logging.info(f"You won! New balance: {self.balance}")
         elif outcome == 'lose':
@@ -209,8 +230,7 @@ class CoinFlipBetting:
         self.total_bets += 1
         win_rate = self.total_wins / self.total_bets if self.total_bets > 0 else 0
 
-        logging.info(
-            f"Total bets: {self.total_bets}, Total wins: {self.total_wins}, Total losses: {self.total_losses}, Win rate: {win_rate:.2f}")
+        logging.info(f"Total bets: {self.total_bets}, Total wins: {self.total_wins}, Total losses: {self.total_losses}, Win rate: {win_rate:.2f}")
 
         save_to_database(outcome, self.current_bet, self.consecutive_losses)
 
@@ -244,7 +264,9 @@ class CoinFlipBetting:
         backup_database()
 
 
+
 if __name__ == '__main__':
     validate_database_contents()
     betting_system = CoinFlipBetting()
     betting_system.start()
+
